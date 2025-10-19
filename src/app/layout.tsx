@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "OCR Studio",
-  description: "Responsive Demo",
+  title: "OCR App",
+  description: "convert images to text using OCR technology",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { createWorker } from "tesseract.js";
 // Theme toggle removed
-
 type LangCode = "eng" | "fra";
 
 export default function Home() {
@@ -123,8 +122,8 @@ export default function Home() {
               OCR
             </div>
             <div className="leading-none">
-              <div className="font-semibold text-lg">OCR Studio</div>
-              <div className="text-xs text-neutral-500">Responsive Demo</div>
+              <div className="font-semibold text-lg">OCR App</div>
+              <div className="text-xs text-neutral-500">convert images to text</div>
             </div>
           </div>
 
