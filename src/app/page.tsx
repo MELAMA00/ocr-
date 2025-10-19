@@ -160,14 +160,14 @@ export default function Home() {
         {/* LEFT: Input */}
         <section className="space-y-4">
           <RetroWindow title="IMAGE SOURCE" className="shadow-none">
-            <div className="flex items-center justify-between gap-6 md:gap-8 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 md:gap-8 mb-4">
               <h2 className="font-semibold font-[family-name:var(--font-silkscreen)] uppercase tracking-[0.15em] whitespace-nowrap flex items-center gap-3 text-base sm:text-lg">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/window.svg" alt="" className="w-5 h-5" />
+                <img src="/window.svg" alt="" className="w-4 h-4 sm:w-5 sm:h-5" />
                 Image source
               </h2>
               <div className="flex items-center gap-2">
-              <label className={[pixelButtonClass(), 'cursor-pointer'].join(' ')}>
+              <label className={[pixelButtonClass(), 'cursor-pointer w-full sm:w-auto justify-center'].join(' ')}>
                 Importer
                 <input
                   type="file"
@@ -272,18 +272,18 @@ export default function Home() {
         {/* RIGHT: Result */}
         <section className="space-y-4">
           <RetroWindow title="OCR RESULT" className="shadow-none">
-            <div className="flex items-center justify-between gap-6 md:gap-8 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 md:gap-8 mb-4">
               <h2 className="font-semibold font-[family-name:var(--font-silkscreen)] uppercase tracking-[0.15em] whitespace-nowrap flex items-center gap-3 text-base sm:text-lg">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/file.svg" alt="" className="w-5 h-5" />
+                <img src="/file.svg" alt="" className="w-4 h-4 sm:w-5 sm:h-5" />
                 Resultat OCR
               </h2>
-              <div className="flex items-center gap-2">
-                <PixelButton onClick={copyText} disabled={!text}>Copier</PixelButton>
+              <div className="flex flex-wrap items-center gap-2">
+                <PixelButton className="w-full sm:w-auto" onClick={copyText} disabled={!text}>Copier</PixelButton>
                 <a
                   href={"data:text/plain;charset=utf-8," + encodeURIComponent(text || "")}
                   download="ocr.txt"
-                  className={[pixelButtonClass(), !text ? "pointer-events-none opacity-50" : ""].join(" ")}
+                  className={[pixelButtonClass(), 'w-full sm:w-auto text-center', !text ? "pointer-events-none opacity-50" : ""].join(" ")}
                 >
                   Telecharger .txt
                 </a>
@@ -294,7 +294,7 @@ export default function Home() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Le texte reconnu s'affichera ici..."
-              className="min-h-[360px] w-full rounded-md border border-neutral-200 bg-white p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-neutral-300"
+              className="min-h-[32vh] md:min-h-[360px] w-full rounded-md border border-neutral-200 bg-white p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-neutral-300"
               spellCheck={false}
             />
           </RetroWindow>

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Silkscreen } from "next/font/google";
 import "./globals.css";
 
@@ -8,6 +8,13 @@ const silkscreen = Silkscreen({ subsets: ["latin"], weight: "700", variable: "--
 export const metadata: Metadata = {
   title: "OCR App",
   description: "convert images to text using OCR technology",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
