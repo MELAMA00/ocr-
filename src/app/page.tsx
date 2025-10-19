@@ -1,39 +1,37 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createWorker } from "tesseract.js";
-// Theme toggle removed
-type LangCode = "eng" | "fra";
+import RetroWindow from "@/components/RetroWindow";
+import PixelButton, { pixelButtonClass } from "@/components/PixelButton";
+import DottedDivider from "@/components/DottedDivider";
+import Badge from "@/components/Badge";
 
 export default function Home() {
-  // state
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [text, setText] = useState<string>("");
-  const [lang, setLang] = useState<LangCode>("eng");
   const [status, setStatus] = useState<string>("Idle");
   const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  // worker ref to allow cancel
   const workerRef = useRef<Awaited<ReturnType<typeof createWorker>> | null>(null);
+  const dragCounter = useRef(0);
 
-  // human-friendly status
   const humanStatus = useMemo(() => {
     if (status === "Idle" && !file) return "Importez une image (PNG/JPG/WEBP)";
-    if (status === "recognizing text") return "Reconnaissance du texte…";
-    if (status === "loading tesseract core") return "Chargement du moteur…";
-    if (status === "initializing tesseract") return "Initialisation…";
-    if (status === "loading language traineddata")
-      return `Téléchargement du modèle (${lang})…`;
-    if (status === "Done") return "Terminé ✅";
-    if (status === "Cancelled") return "Annulé ⛔";
-    if (status === "Error") return "Erreur ❌";
+    if (status === "recognizing text") return "Reconnaissance du texte...";
+    if (status === "loading tesseract core") return "Chargement du moteur...";
+    if (status === "initializing tesseract") return "Initialisation...";
+    if (status === "loading language traineddata") return "Telechargement du modele...";
+    if (status === "Done") return "Termine.";
+    if (status === "Cancelled") return "Annule.";
+    if (status === "Error") return "Erreur.";
     return status;
-  }, [status, lang, file]);
+  }, [status, file]);
 
-  // helpers
   const onSelectFile = useCallback((f?: File) => {
     if (!f) return;
     if (!f.type.startsWith("image/")) {
@@ -46,19 +44,44 @@ export default function Home() {
     setStatus("Idle");
     setIsRunning(false);
     setFile(f);
-    setPreview(URL.createObjectURL(f));
+    const url = URL.createObjectURL(f);
+    setPreview(url);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
+  // Theme removed
+
   const onDrop = useCallback(
-    (e: React.DragEvent<HTMLLabelElement | HTMLDivElement>) => {
+    (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
-      onSelectFile(e.dataTransfer.files?.[0] ?? undefined);
+      dragCounter.current = 0;
+      setIsDragging(false);
+      onSelectFile(e.dataTransfer.files?.[0]);
     },
     [onSelectFile]
   );
 
+  const onDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragCounter.current += 1;
+    setIsDragging(true);
+  }, []);
+
+  const onDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setIsDragging(false);
+  }, []);
+
   const onChoose = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => onSelectFile(e.target.files?.[0]),
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onSelectFile(e.target.files?.[0] ?? undefined);
+    },
     [onSelectFile]
   );
 
@@ -69,8 +92,8 @@ export default function Home() {
     setText("");
     setProgress(0);
 
-    const worker = await createWorker(lang, 1, {
-      logger: (m) => {
+    const worker = await createWorker('eng', undefined, {
+      logger: (m: { status?: string; progress?: number }) => {
         if (m.status) setStatus(m.status);
         if (typeof m.progress === "number") {
           setProgress(Math.max(1, Math.round(m.progress * 100)));
@@ -86,13 +109,16 @@ export default function Home() {
       setProgress(100);
     } catch (err: any) {
       if (status !== "Cancelled") {
-        setError(err?.message ?? "Échec OCR");
+        setError(err?.message ?? "Echec OCR");
         setStatus("Error");
       }
     } finally {
-      await worker.terminate();
-      workerRef.current = null;
-      setIsRunning(false);
+      try {
+        await worker.terminate();
+      } finally {
+        workerRef.current = null;
+        setIsRunning(false);
+      }
     }
   }
 
@@ -113,242 +139,176 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+    <div className="min-h-screen text-neutral-900">
       {/* HEADER */}
-      <header className="sticky top-0 z-10 bg-white/80 dark:bg-neutral-950/80 backdrop-blur border-b border-neutral-200 dark:border-neutral-800">
-        <div className="mx-auto max-w-[1100px] px-4 py-3 flex items-center justify-between gap-3">
+      <header className="border-b border-neutral-200 sticky top-0 z-20 bg-white/80 backdrop-blur">
+        <div className="mx-auto max-w-7xl px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="size-8 rounded-lg bg-black text-white grid place-items-center font-bold">
-              OCR
-            </div>
-            <div className="leading-none">
-              <div className="font-semibold text-lg">OCR App</div>
-              <div className="text-xs text-neutral-500">convert images to text</div>
-            </div>
+            <div className="h-9 w-9 grid place-items-center rounded-md bg-neutral-900 text-white font-semibold">OCR</div>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight font-[family-name:var(--font-silkscreen)] tracking-widest">OCR</h1>
+            
           </div>
-
-          {/* Controls */}
           <div className="flex items-center gap-2">
-            <label className="text-sm hidden sm:flex items-center gap-2">
-              Langue
-              <select
-                value={lang}
-                onChange={(e) => setLang(e.target.value as LangCode)}
-                className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1 text-sm"
-              >
-                <option value="eng">English (eng)</option>
-                <option value="fra">Français (fra)</option>
-              </select>
-            </label>
-
-            {/* Theme toggle removed */}
-
-            <button
-              className="rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              onClick={() => window.location.reload()}
-              title="Reset"
-            >
-              Reset
-            </button>
+            <Badge>DEMO</Badge>
           </div>
+      
         </div>
       </header>
 
-      {/* CONTENT */}
-      <main className="mx-auto w-full max-w-[1100px] px-3 sm:px-4 py-4 sm:py-6">
-        {/* GRID: 1 col on mobile, 2 cols >= lg */}
-        <div className="grid gap-4 lg:gap-6 lg:grid-cols-2">
-          {/* LEFT PANEL */}
-          <section className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 sm:p-5">
-            <div className="flex items-center justify-between gap-3 mb-3 sm:mb-4">
-              <h2 className="font-semibold text-base sm:text-lg">Image source</h2>
-              {/* visible on small screens */}
-              <label className="block lg:hidden">
-                <span className="sr-only">Importer</span>
+      {/* MAIN */}
+      <main className="mx-auto max-w-7xl px-4 py-8 grid gap-8 lg:gap-10 md:grid-cols-2">
+        {/* LEFT: Input */}
+        <section className="space-y-4">
+          <RetroWindow title="IMAGE SOURCE" className="shadow-none">
+            <div className="flex items-center justify-between gap-6 md:gap-8 mb-4">
+              <h2 className="font-semibold font-[family-name:var(--font-silkscreen)] uppercase tracking-[0.15em] whitespace-nowrap flex items-center gap-3 text-base sm:text-lg">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/window.svg" alt="" className="w-5 h-5" />
+                Image source
+              </h2>
+              <div className="flex items-center gap-2">
+              <label className={[pixelButtonClass(), 'cursor-pointer'].join(' ')}>
+                Importer
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
+                  className="sr-only"
                   onChange={onChoose}
-                  className="hidden"
                 />
-                <span className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm">
-                  Importer
-                </span>
               </label>
+            </div>
+            <DottedDivider className="my-4 md:my-5" />
             </div>
 
             {/* Dropzone */}
-            <label
+            <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={onDrop}
+              onDragEnter={onDragEnter}
+              onDragLeave={onDragLeave}
               className={[
-                "block border-2 border-dashed rounded-xl p-4 sm:p-6 md:p-8 text-center cursor-pointer",
-                "bg-white dark:bg-neutral-950 border-neutral-300 dark:border-neutral-700",
-                "hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors",
+                "relative border-2 border-dashed rounded-xl p-6 sm:p-8 transition-colors",
+                isDragging
+                  ? "border-neutral-900 bg-neutral-50/60"
+                  : "bg-white border-neutral-300 hover:bg-neutral-50",
               ].join(" ")}
+              aria-label="Zone de depot"
             >
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={onChoose}
-                className="hidden"
-              />
-              <p className="text-sm sm:text-base text-neutral-600 dark:text-neutral-400">
+              <p className="text-sm text-neutral-600 mb-3">
                 Faites glisser une image ici, ou{" "}
-                <span className="underline">choisissez un fichier</span>
+                <label className="underline cursor-pointer">
+                  choisissez un fichier
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={onChoose}
+                  />
+                </label>
               </p>
 
+              {/* Preview card */}
               {preview ? (
-                <div className="mt-4 sm:mt-6 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
+                <div className="rounded-lg overflow-hidden border border-neutral-200 bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={preview}
-                    alt="preview"
-                    className="w-full object-contain max-h-[45vh] sm:max-h-[50vh]"
-                  />
-                  <div className="p-2 sm:p-3 text-xs text-neutral-600 dark:text-neutral-400 flex items-center justify-between">
+                  <img src={preview} alt="Apercu" className="w-full object-contain max-h-[380px]" />
+                  <div className="p-3 text-xs text-neutral-600 flex items-center justify-between">
                     <span className="truncate">
-                      {file?.name} • {((file?.size ?? 0) / 1024 / 1024).toFixed(2)} MB
+                      {file?.name} - {((file?.size ?? 0) / 1024 / 1024).toFixed(2)} MB
                     </span>
-                    <span className="hidden sm:inline">{file?.type}</span>
+                    <span>{file?.type}</span>
                   </div>
                 </div>
               ) : (
-                <div className="mt-6 h-28 sm:h-32 grid place-items-center text-neutral-500">
-                  Aucune image sélectionnée
+                <div className="h-40 grid place-items-center text-neutral-500">
+                  Aucune image selectionnee
                 </div>
               )}
-            </label>
-
-            {/* Actions + progress */}
-            <div className="mt-4 flex flex-col gap-3">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <button
-                  onClick={runOCR}
-                  disabled={!file || isRunning}
-                  className="w-full sm:w-auto px-4 py-2 rounded-lg bg-black text-white disabled:opacity-50"
-                >
-                  {isRunning ? "Analyse en cours…" : "Lancer l’OCR"}
-                </button>
-                <button
-                  onClick={cancelOCR}
-                  disabled={!isRunning}
-                  className="w-full sm:w-auto px-4 py-2 rounded-lg border border-neutral-300 dark:border-neutral-700 disabled:opacity-50"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={() => {
-                    setFile(null);
-                    setPreview(null);
-                    setText("");
-                    setProgress(0);
-                    setStatus("Idle");
-                    setError(null);
-                  }}
-                  className="w-full sm:w-auto px-4 py-2 rounded-lg border border-neutral-300 dark:border-neutral-700"
-                >
-                  Réinitialiser
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                <div
-                  className="h-2 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden"
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={progress}
-                >
-                  <div
-                    className="h-2 bg-neutral-900 dark:bg-neutral-100 transition-all"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-                <div className="text-xs sm:text-sm text-neutral-700 dark:text-neutral-300">
-                  {humanStatus} {progress ? `• ${progress}%` : ""}
-                </div>
-                {error && (
-                  <div className="text-sm text-red-600 border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/20 rounded-md p-3">
-                    {error}
-                  </div>
-                )}
-              </div>
             </div>
-          </section>
 
-          {/* RIGHT PANEL */}
-          <section className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 sm:p-5">
-            {/* Collapsible header on small screens to save space */}
-            <details open className="group">
-              <summary className="flex items-center justify-between cursor-pointer list-none">
-                <h2 className="font-semibold text-base sm:text-lg">Résultat OCR</h2>
-                <span className="text-xs text-neutral-500 group-open:rotate-180 transition-transform">
-                  ▾
-                </span>
-              </summary>
+            {/* Actions */}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <PixelButton onClick={runOCR} disabled={!file || isRunning} variant="primary">
+                {isRunning ? "Analyse en cours..." : "Lancer l'OCR"}
+              </PixelButton>
+              <PixelButton onClick={cancelOCR} disabled={!isRunning}>Annuler</PixelButton>
+              <PixelButton
+                onClick={() => {
+                  setFile(null);
+                  setPreview(null);
+                  setText("");
+                  setError(null);
+                  setProgress(0);
+                  setStatus("Idle");
+                }}
+                disabled={isRunning || (!file && !text)}
+              >
+                Reinitialiser
+              </PixelButton>
+            </div>
 
-              <div className="mt-3 sm:mt-4">
-                <div className="flex items-center justify-end gap-2 mb-2">
-                  <button
-                    onClick={copyText}
-                    disabled={!text}
-                    className="px-3 py-1.5 text-sm rounded-md border border-neutral-300 dark:border-neutral-700 disabled:opacity-50"
-                  >
-                    Copier
-                  </button>
-                  <a
-                    href={"data:text/plain;charset=utf-8," + encodeURIComponent(text || "")}
-                    download="ocr.txt"
-                    className={[
-                      "px-3 py-1.5 text-sm rounded-md border border-neutral-300 dark:border-neutral-700",
-                      !text ? "pointer-events-none opacity-50" : "",
-                    ].join(" ")}
-                  >
-                    Télécharger .txt
-                  </a>
-                </div>
-
-                <textarea
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Le texte reconnu s’affichera ici…"
-                  className="min-h-[40vh] w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-neutral-300 dark:focus:ring-neutral-700"
-                />
-              </div>
-            </details>
-          </section>
-        </div>
-      </main>
-
-      {/* MOBILE STICKY ACTION BAR (only when running & on small screens) */}
-      {isRunning && (
-        <div className="fixed bottom-3 left-0 right-0 px-3 lg:hidden">
-          <div className="mx-auto max-w-[600px] rounded-xl border shadow-sm bg-white/90 dark:bg-neutral-900/90 backdrop-blur border-neutral-200 dark:border-neutral-800 p-2 flex items-center gap-2">
-            <div className="flex-1">
-              <div className="h-2 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden">
+            {/* Status + Progress */}
+            <div className="mt-4 space-y-2" aria-live="polite">
+              <div className="h-2 w-full bg-neutral-200 rounded-full overflow-hidden">
                 <div
-                  className="h-2 bg-neutral-900 dark:bg-neutral-100 transition-all"
+                  className="h-2 bg-gradient-to-r from-neutral-900 to-neutral-700 transition-all"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <div className="text-xs mt-1 text-neutral-700 dark:text-neutral-300 truncate">
-                {humanStatus} {progress ? `• ${progress}%` : ""}
+              <div className="text-sm text-neutral-700">
+                {humanStatus} {progress ? `- ${progress}%` : ""}
+              </div>
+
+              {error && (
+                <div className="text-sm text-red-700 border border-red-300 bg-red-50 rounded-md p-3 flex items-start gap-2">
+                  <span aria-hidden>⚠️</span>
+                  <span>{error}</span>
+                </div>
+              )}
+            </div>
+          </RetroWindow>
+        </section>
+
+        {/* RIGHT: Result */}
+        <section className="space-y-4">
+          <RetroWindow title="OCR RESULT" className="shadow-none">
+            <div className="flex items-center justify-between gap-6 md:gap-8 mb-4">
+              <h2 className="font-semibold font-[family-name:var(--font-silkscreen)] uppercase tracking-[0.15em] whitespace-nowrap flex items-center gap-3 text-base sm:text-lg">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/file.svg" alt="" className="w-5 h-5" />
+                Resultat OCR
+              </h2>
+              <div className="flex items-center gap-2">
+                <PixelButton onClick={copyText} disabled={!text}>Copier</PixelButton>
+                <a
+                  href={"data:text/plain;charset=utf-8," + encodeURIComponent(text || "")}
+                  download="ocr.txt"
+                  className={[pixelButtonClass(), !text ? "pointer-events-none opacity-50" : ""].join(" ")}
+                >
+                  Telecharger .txt
+                </a>
               </div>
             </div>
-            <button
-              onClick={cancelOCR}
-              className="px-3 py-1.5 rounded-lg border border-neutral-300 dark:border-neutral-700 text-sm"
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
-      )}
+            <DottedDivider className="my-4 md:my-5" />
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Le texte reconnu s'affichera ici..."
+              className="min-h-[360px] w-full rounded-md border border-neutral-200 bg-white p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-neutral-300"
+              spellCheck={false}
+            />
+          </RetroWindow>
+
+          <p className="text-xs text-neutral-500">
+            Astuce: la precision est meilleure avec des images nettes, contraste eleve, et une
+            resolution &gt;= 300 DPI.
+          </p>
+        </section>
+      </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-neutral-200 dark:border-neutral-800 py-6 text-center text-xs text-neutral-500">
-        Client-side OCR avec Tesseract.js • Aucune donnée envoyée au serveur
+      <footer className="border-t border-neutral-200 py-6 text-center text-xs text-neutral-500 font-[family-name:var(--font-silkscreen)] tracking-widest">
+        OCR cote client avec Tesseract.js - Aucune donnee envoyee au serveur
       </footer>
     </div>
   );
