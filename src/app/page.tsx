@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createWorker } from "tesseract.js";
+import { createWorker, OEM } from "tesseract.js";
 import RetroWindow from "@/components/RetroWindow";
 import PixelButton, { pixelButtonClass } from "@/components/PixelButton";
 import DottedDivider from "@/components/DottedDivider";
@@ -19,6 +19,59 @@ export default function Home() {
 
   const workerRef = useRef<Awaited<ReturnType<typeof createWorker>> | null>(null);
   const dragCounter = useRef(0);
+
+  // Resize/compress large images client-side to speed up OCR and reduce memory
+  const prepareImage = useCallback(async (f: File): Promise<Blob> => {
+    const MAX_DIMENSION = 2200; // px on the longest side (balance of quality/speed)
+    const isImage = f.type.startsWith("image/");
+    if (!isImage) throw new Error("Fichier non supporte");
+
+    // If already small (< 3MB) and not huge dimensions, use as-is
+    // We still guard with try/catch; if canvas fails we return original
+    try {
+      const bmp = await createImageBitmap(f).catch(() => null as ImageBitmap | null);
+      if (!bmp) return f;
+
+      const { width, height } = bmp;
+      const longest = Math.max(width, height);
+      if (longest <= MAX_DIMENSION && f.size <= 3 * 1024 * 1024) {
+        bmp.close();
+        return f;
+      }
+
+      const scale = MAX_DIMENSION / longest;
+      const targetW = Math.round(width * Math.min(1, scale));
+      const targetH = Math.round(height * Math.min(1, scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bmp.close();
+        return f;
+      }
+
+      // Draw with high quality
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bmp, 0, 0, targetW, targetH);
+      bmp.close();
+
+      const quality = 0.85; // good balance
+      const type = f.type === "image/png" ? "image/jpeg" : f.type; // prefer jpeg for size
+
+      const blob: Blob | null = await new Promise((resolve) =>
+        canvas.toBlob((b) => resolve(b), type || "image/jpeg", quality)
+      );
+      if (!blob) return f;
+      // If compression somehow bigger, fallback
+      if (blob.size >= f.size) return f;
+      return blob;
+    } catch {
+      return f;
+    }
+  }, []);
 
   const humanStatus = useMemo(() => {
     if (status === "Idle" && !file) return "Importez une image (PNG/JPG/WEBP)";
@@ -92,33 +145,46 @@ export default function Home() {
     setText("");
     setProgress(0);
 
-    const worker = await createWorker('eng', undefined, {
-      logger: (m: { status?: string; progress?: number }) => {
-        if (m.status) setStatus(m.status);
-        if (typeof m.progress === "number") {
-          setProgress(Math.max(1, Math.round(m.progress * 100)));
-        }
-      },
-    });
-    workerRef.current = worker;
+    // Lazily create or reuse a single worker (faster, more stable)
+    if (!workerRef.current) {
+      workerRef.current = await createWorker("eng", OEM.LSTM_ONLY, {
+        logger: (m: { status?: string; progress?: number }) => {
+          if (m.status) setStatus(m.status);
+          if (typeof m.progress === "number") {
+            setProgress(Math.max(1, Math.round(m.progress * 100)));
+          }
+        },
+      });
+    }
+    const worker = workerRef.current;
 
     try {
-      const { data } = await worker.recognize(file);
+      // Preprocess image to speed up OCR and reduce crashes on huge inputs
+      const inputBlob = await prepareImage(file);
+      const toRecognize = inputBlob instanceof File ? inputBlob : new File([inputBlob], file.name, { type: inputBlob.type || file.type });
+
+      const { data } = await worker.recognize(toRecognize, { rectangle: undefined });
       setText(data.text || "");
       setStatus("Done");
       setProgress(100);
     } catch (err: any) {
       if (status !== "Cancelled") {
-        setError(err?.message ?? "Echec OCR");
+        const msg = String(err?.message || err || "");
+        // Map some common fetch/wasm errors to friendlier text
+        const friendly =
+          msg.includes("Failed to fetch") || msg.includes("NetworkError")
+            ? "Telechargement du modele echoue. Verifiez la connexion et reessayez."
+            : msg.includes("wasm") || msg.includes("WebAssembly")
+            ? "Le moteur WebAssembly n'a pas pu se charger. Reessayez dans un nouvel onglet."
+            : msg.includes("Out of memory") || msg.includes("memory")
+            ? "Image trop volumineuse. Essayez avec une image plus petite."
+            : undefined;
+        setError(friendly ?? (msg || "Echec OCR"));
         setStatus("Error");
       }
     } finally {
-      try {
-        await worker.terminate();
-      } finally {
-        workerRef.current = null;
-        setIsRunning(false);
-      }
+      // Keep worker alive for next runs; terminate on cancel/unmount
+      setIsRunning(false);
     }
   }
 
@@ -133,6 +199,16 @@ export default function Home() {
       }
     }
   }
+
+  // Cleanup worker on unmount to free resources
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate().catch(() => {});
+        workerRef.current = null;
+      }
+    };
+  }, []);
 
   function copyText() {
     if (text) navigator.clipboard.writeText(text);
